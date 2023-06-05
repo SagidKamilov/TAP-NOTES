@@ -148,7 +148,7 @@ class Ui_Form(object):
 
         self.retranslateUi(Form)
         QtCore.QMetaObject.connectSlotsByName(Form)
-        self.sql = sqlite3.connect('../../TapTapApp/DB.db')
+        self.sql = sqlite3.connect('DB.db')
         self.cursor = self.sql.cursor()
         self.new_record_added = True
         self.load_records()
