@@ -13,6 +13,7 @@ from PyQt5 import QtCore, QtGui, QtWidgets
 from PyQt5.QtWidgets import QMessageBox
 from datetime import datetime
 import sqlite3
+import random
 
 class Ui_Form(object):
     def setupUi(self, Form):
@@ -150,8 +151,11 @@ class Ui_Form(object):
         QtCore.QMetaObject.connectSlotsByName(Form)
         self.sql = sqlite3.connect('DB.db')
         self.cursor = self.sql.cursor()
-        self.new_record_added = True
-        self.load_records()
+        self.load_notes()
+        self.r_table_racords.cellClicked.connect(self.open_note)
+        self.r_add_record.clicked.connect(self.add_note)
+        self.pushButton_2.clicked.connect(self.delete_note)
+        self.pushButton.clicked.connect(self.save_note)
 
 
     def retranslateUi(self, Form):
@@ -163,113 +167,90 @@ class Ui_Form(object):
         self.pushButton_2.setText(_translate("Form", "Удалить"))
         self.pushButton.setText(_translate("Form", "Сохранить"))
 
-        # Connect the button to the slot
-        self.r_add_record.clicked.connect(self.add_record)
-        self.pushButton_2.clicked.connect(self.delete_record)
-        self.r_table_racords.itemSelectionChanged.connect(self.open_note)
-        self.pushButton.clicked.connect(self.save_data)
-        # self.pushButton.clicked.connect(self.open_note)
+    def load_notes(self):
+        self.cursor.execute('SELECT name_note FROM notes')
+        result = self.cursor.fetchall()
+        for i in range(len(result)):
+            self.r_table_racords.insertRow(i)
+            item = QtWidgets.QTableWidgetItem(str(result[i][0]))
+            item.setData(QtCore.Qt.BackgroundRole, QtGui.QColor(random.choice(["yellow", 'lightgreen', 'orange', 'lightblue'])))
+            self.r_table_racords.setItem(i, 0, item)
 
-    def load_records(self):
-        self.cursor.execute("SELECT name_note FROM notes")
-        records = self.cursor.fetchall()
-        print(records)
-        row_count = len(records)
-        self.r_table_racords.setRowCount(row_count)
-        for row, record in enumerate(records):
-            item = QtWidgets.QTableWidgetItem(record[0])
-            font = QtGui.QFont()
-            font.setFamily("Segoe Print")
-            font.setPointSize(10)
-            item.setFont(font)
-            colors = ["#F183E0", "#EFEA6C", "#FFB47E", "#6875EB"]
-            color_index = (row + 1) % len(colors)
-            color = colors[color_index]
-            item.setBackground(QtGui.QColor(color))
-            self.r_table_racords.setItem(row, 0, item)
 
-    # Метод готов, при создании записи, генерирует строку в таблице
-    def add_record(self):
-        if self.new_record_added:
-            _translate = QtCore.QCoreApplication.translate
-            self.w_head.setText(_translate("Form", ""))
-            self.w_data.setText(_translate("Form", ""))
-            row_count = self.r_table_racords.rowCount()
-            self.r_table_racords.setRowCount(row_count + 1)
-            item = QtWidgets.QTableWidgetItem()
-            font = QtGui.QFont()
-            font.setFamily("Segoe Print")
-            font.setPointSize(10)
-            item.setFont(font)
-            item.setText("Новая запись")
-            colors = ["#F183E0", "#EFEA6C", "#FFB47E", "#6875EB"]
-            color_index = (row_count + 1) % len(colors)
-            color = colors[color_index]
-            item.setBackground(QtGui.QColor(color))
-            self.r_table_racords.setItem(row_count, 0, item)
-            self.new_record_added = False
+    def open_note(self, row):
+        self.r_table_racords.setEnabled(False)
+        self.w_data.setStyleSheet("border: 0px;\n"
+                                    f"background-color: {self.r_table_racords.item(row, 0).background().color().name()};\n"
+                                    "padding: 10px;")
+        self.w_head.setStyleSheet(f"background-color: {self.r_table_racords.item(row, 0).background().color().name()};\n"
+                                  "border: 0px;\n" "padding: 10px;")
+        name_note = self.r_table_racords.item(row, 0).text()
+        self.cursor.execute(f'SELECT name_note, date_note, text_note FROM notes WHERE name_note="{name_note}"')
+        result = self.cursor.fetchone()
+        if result:
+            self.w_head.setText(result[0])
+            self.w_data.setText(result[1])
+            self.w_write_field.setText(result[2])
+
+    def delete_note(self):
+        selected_row = self.r_table_racords.currentRow()
+        if selected_row >= 0:
+            name_note = self.r_table_racords.item(int(selected_row), 0).text()
+            self.cursor.execute(f'DELETE FROM notes WHERE name_note="{name_note}"')
+            self.sql.commit()
+            self.r_table_racords.removeRow(selected_row)
+            QMessageBox.information(Form, 'Запись удалена.', 'Запись была успешно удалена!')
             self.r_table_racords.setEnabled(True)
         else:
-            QMessageBox.warning(Form, 'Ошибка ввода!', 'Сначала надо сохранить запись!')
+            QMessageBox.information(Form, 'Не удалось удалить!', 'Вы не выбрали запись для удаления.')
 
+    def add_note(self):
+        self.record_dialog = QtWidgets.QDialog()
+        self.record_dialog.setWindowTitle('Добавить запись')
+        self.record_dialog.setFixedSize(400, 200)
+        layout = QtWidgets.QVBoxLayout(self.record_dialog)
+        name_label = QtWidgets.QLabel('Имя записи:')
+        layout.addWidget(name_label)
+        self.name_line_edit = QtWidgets.QLineEdit()
+        layout.addWidget(self.name_line_edit)
 
-    # Добавить удаление записис из БД
-    def delete_record(self):
-        selected_items = self.r_table_racords.selectedItems()
-        if len(selected_items) > 0:
-            name_note = self.w_head.text()
-            try:
-                self.cursor.execute(f'DELETE FROM notes WHERE id_note=0')
-                self.sql.commit()
-                QMessageBox.information(Form, 'Запись удалена!', 'Операция по удалению записи была успешна выполнена!')
-            except Exception as e:
-                print(e)
-            row = selected_items[0].row()
-            self.r_table_racords.removeRow(row)
+        button_box = QtWidgets.QDialogButtonBox()
+        button_box.setStandardButtons(QtWidgets.QDialogButtonBox.Cancel | QtWidgets.QDialogButtonBox.Ok)
+        button_box.accepted.connect(self.confirm_add_record)
+        button_box.rejected.connect(self.record_dialog.reject)
+        layout.addWidget(button_box)
+        self.record_dialog.exec_()
+
+    def confirm_add_record(self):
+        name = self.name_line_edit.text()
+        self.cursor.execute(f'INSERT INTO notes (name_note, date_note) VALUES ("{name}", "{datetime.now().date()}")')
+        self.sql.commit()
+        self.r_table_racords.insertRow(self.r_table_racords.rowCount())
+        item = QtWidgets.QTableWidgetItem(name)
+        item.setData(QtCore.Qt.BackgroundRole,
+                     QtGui.QColor(random.choice(["yellow", 'lightgreen', 'orange', 'lightblue'])))
+        self.r_table_racords.setItem(self.r_table_racords.rowCount() - 1, 0, item)
+        self.record_dialog.accept()
+
+    def save_note(self):
+        selected_row = self.r_table_racords.currentRow()
+        if selected_row >= 0:
+            name_note = self.r_table_racords.item(selected_row, 0).text()
+            new_text = self.w_write_field.toPlainText()
+            self.cursor.execute(f'UPDATE notes SET text_note="{new_text}" WHERE name_note="{name_note}"')
+            self.sql.commit()
+            QMessageBox.information(Form, 'Запись сохранена.', 'Запись была успешно сохранена!')
             self.r_table_racords.setEnabled(True)
-
-    def open_note(self):
-        selected_items = self.r_table_racords.selectedItems()
-        if len(selected_items) > 0:
-            text = selected_items[0].text()
-            try:
-                self.cursor.execute(f'SELECT text_note, date_note, name_note FROM notes WHERE name_note="{text}"')
-            except Exception as e:
-                print(e)
-            response = self.cursor.fetchone()
-            self.w_head.setText(response[2])
-            self.w_data.setText(response[1])
-            self.w_write_field.setText(response[0])
-            self.r_table_racords.setDisabled(True)
         else:
-            self.w_head.setText("")
+            QMessageBox.information(Form, 'Не удалось сохранить!', 'Вы не выбрали запись для сохранения.')
 
-    def save_data(self):
-        self.new_record_added = True
-        selected_items = self.r_table_racords.selectedItems()
-        if len(selected_items) > 0:
-            text = selected_items[0].text()
-            name_note = self.w_head.text()
-            text_note = self.w_write_field.toPlainText()
-            date_note = self.w_data.text()
-            try:
-                self.cursor.execute(f'INSERT INTO notes(id_note, name_note, date_note, text_note) VALUES (3, "{name_note}", "{date_note}", "{text_note}")')
-                self.sql.commit()
-                QMessageBox.information(Form, 'Запись сохранена!', 'Операция по сохранению записи была успешна выполнена!')
-            except Exception as e:
-                print(e)
-            self.r_table_racords.setEnabled(True)
-            # # Сохранение данных в БД SQLite3
-            # conn = sqlite3.connect('DB.db')  # Укажите путь и имя вашей БД SQLite3
-            # cursor = conn.cursor()
-            #
-            # # Обновление значения в выбранном столбце
-            # cursor.execute("UPDATE YourTableName SET YourColumnName = ?, DateColumn = ? WHERE YourColumnName = ?",
-            #                (data, current_date, text))
-            #
-            # conn.commit()
-            # conn.close()
 
+    def check_note(self, name_note):
+        self.cursor.execute(f'SELECT name_note FROM notes WHERE name_note={name_note}')
+        if self.cursor.fetchone():
+            return True
+        else:
+            return False
 
 if __name__ == "__main__":
     import sys
